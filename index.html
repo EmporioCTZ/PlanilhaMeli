@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Envio Full → Excel</title>
+<style>
+  :root { --bg: #f4f5f7; --card: #fff; --texto: #1d1f23; --muted: #6b7079; --linha: #dfe2e7; --cor: #c8102e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--texto); }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--linha); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  #soltar { display: block; border: 2px dashed var(--linha); border-radius: 12px; padding: 28px 16px; text-align: center; cursor: pointer; }
+  #soltar.em-cima { border-color: var(--cor); background: #fff5f6; }
+  #soltar input { display: none; }
+  .topo { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; }
+  label.campo { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+  input[type=text], input[type=number] { font: inherit; padding: 7px 9px; border: 1px solid var(--linha); border-radius: 8px; min-width: 0; }
+  button { font: inherit; font-weight: 600; padding: 9px 16px; border: 0; border-radius: 8px; background: var(--cor); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  .rola { overflow-x: auto; margin-top: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { padding: 7px 8px; border-bottom: 1px solid var(--linha); text-align: left; vertical-align: top; }
+  th { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+  td:first-child { min-width: 280px; }
+  td.n { text-align: right; white-space: nowrap; }
+  td input[type=number] { width: 80px; text-align: right; }
+  td input[type=text] { width: 150px; }
+  .erro { color: var(--cor); font-weight: 600; }
+  .botoes { display: flex; gap: 8px; }
+  button.sec { background: #fff; color: var(--texto); border: 1px solid var(--linha); }
+  .so-imp { display: none; }
+
+  /* impressão: só o cabeçalho do envio e a tabela, A4 deitado */
+  @page { size: A4 landscape; margin: 12mm; }
+  @media print {
+    body { background: #fff; font-size: 10pt; }
+    main { max-width: none; padding: 0; }
+    h1, main > p, #soltar, .topo, .no-imp { display: none !important; }
+    .so-imp { display: block; }
+    .card { border: 0; padding: 0; margin: 0; }
+    .rola { overflow: visible; margin-top: 0; }
+    .cab-imp { display: flex; justify-content: space-between; align-items: end; border-bottom: 3px solid var(--cor); padding-bottom: 6px; margin-bottom: 10px; }
+    .cab-imp h2 { margin: 0; font-size: 17pt; }
+    .cab-imp .muted { font-size: 9pt; text-align: right; }
+    .resumo-imp { display: flex; gap: 10px; margin-bottom: 10px; }
+    .resumo-imp div { border: 1px solid #bbb; border-radius: 6px; padding: 4px 12px; }
+    .resumo-imp b { font-size: 13pt; display: block; }
+    table { font-size: 9.5pt; }
+    th, td { border: 1px solid #999; padding: 5px 6px; }
+    th { background: #eee; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    tbody tr:nth-child(even) td { background: #f6f6f6; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    tr { break-inside: avoid; }
+    thead { display: table-header-group; }
+    td:first-child { min-width: 0; width: 34%; }
+    .cod { font-family: ui-monospace, Consolas, monospace; font-size: 9pt; }
+    td input { border: 0 !important; background: transparent; padding: 0; width: 100% !important; text-align: inherit; font: inherit; font-weight: 700; }
+    td input:placeholder-shown { border-bottom: 1px solid #000 !important; } /* vazio: linha para escrever à mão */
+    td input[type=number] { text-align: center; }
+    td.n { font-weight: 700; font-size: 11pt; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Envio Full → Excel</h1>
+  <p class="muted">Anexe o PDF de instruções de preparação do envio (Mercado Livre), preencha caixas e quem fez, e baixe a planilha.</p>
+
+  <label id="soltar" class="card"><input type="file" id="arq" accept="application/pdf">
+    <strong>Clique ou arraste o PDF aqui</strong><br><span class="muted" id="status">Inbound-…-preparation-instructions.pdf</span></label>
+
+  <section class="card" id="res" hidden>
+    <div class="so-imp">
+      <div class="cab-imp"><h2 id="tituloImp"></h2><span class="muted">Envio Full · Mercado Livre<br>Impresso em <span id="dataImp"></span></span></div>
+      <div class="resumo-imp"><div>Produtos<b id="nProd"></b></div><div>Unidades<b id="nUn"></b></div><div>Caixas<b id="nCx"></b></div></div>
+    </div>
+    <div class="topo">
+      <div><strong id="titulo"></strong><br><span class="muted" id="resumo"></span></div>
+      <label class="campo">Nome de quem fez (preenche todas as linhas)<input type="text" id="nomeTodos" autocomplete="name"></label>
+      <div class="botoes"><button type="button" class="sec" id="imprimir">Imprimir</button><button type="button" id="baixar">Baixar Excel</button></div>
+    </div>
+    <div class="rola"><table>
+      <thead><tr><th>Produto</th><th>SKU</th><th>Código ML</th><th>Código universal</th><th>Unidades</th><th>Identificação</th><th>Caixas</th><th>Nome de quem fez</th></tr></thead>
+      <tbody id="linhas"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const $ = s => document.querySelector(s);
+let frete = '', itens = [];
+
+// Lê o PDF do ML: cada produto começa em "Código ML:" na coluna PRODUTO; unidades e identificação
+// são o texto das colunas UNIDADES e IDENTIFICAÇÃO na mesma faixa de altura do produto.
+async function ler(buf) {
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise, pedacos = [];
+  let col = null;
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const pg = await pdf.getPage(p), alt = pg.getViewport({ scale: 1 }).height;
+    for (const t of (await pg.getTextContent()).items) {
+      if (!t.str.trim()) continue;
+      const x = t.transform[4], y = (p - 1) * 10000 + (alt - t.transform[5]); // y cresce para baixo, página após página
+      pedacos.push({ x, y, s: t.str });
+      const h = t.str.trim().toUpperCase();
+      if (h === 'UNIDADES') (col ||= {}).un = x;
+      if (h.startsWith('IDENTIFI')) (col ||= {}).id = x;
+      if (h.startsWith('INSTRU') && h.includes('PREPARA') && !h.includes('LISTA')) (col ||= {}).ins = x;
+    }
+  }
+  const tudo = pedacos.map(t => t.s).join(' ');
+  frete = (tudo.match(/Frete\s*#?\s*(\d+)/i) || [])[1] || '';
+  if (!col?.un || !col?.id) throw new Error('Não achei as colunas UNIDADES e IDENTIFICAÇÃO. É o PDF de instruções de preparação do envio?');
+  pedacos.sort((a, b) => a.y - b.y || a.x - b.x);
+  const esq = pedacos.filter(t => t.x < col.un - 4), inicios = esq.filter(t => /C[óo]digo ML/i.test(t.s)).map(t => t.y);
+  return inicios.map((y0, i) => {
+    const y1 = inicios[i + 1] ?? Infinity, faixa = t => t.y >= y0 - 3 && t.y < y1 - 3;
+    const txt = esq.filter(faixa).map(t => t.s).join(' ').replace(/\s+/g, ' ').trim();
+    const pega = re => (txt.match(re) || [])[1] || '';
+    const ml = pega(/C[óo]digo ML:\s*(\S+)/i), ean = pega(/C[óo]digo universal:\s*(N\/A|\d+)/i), sku = pega(/SKU:\s*(\S+)/i);
+    const nome = txt.replace(/C[óo]digo ML:\s*\S+/i, '').replace(/C[óo]digo universal:\s*(N\/A|\d+)?/i, '').replace(/SKU:\s*\S+/i, '').replace(/\s+/g, ' ').trim();
+    const colTxt = (de, ate) => pedacos.filter(t => faixa(t) && t.x >= de - 4 && t.x < ate - 4).map(t => t.s).join(' ').replace(/\s+/g, ' ').trim();
+    const un = parseInt(colTxt(col.un, col.id).replace(/\D/g, ''), 10) || 0;
+    return { nome, sku, ml, ean: ean === 'N/A' ? '' : ean, un, ident: colTxt(col.id, col.ins || Infinity), caixas: '', quem: '' };
+  });
+}
+
+function mostrar() {
+  const total = itens.reduce((s, i) => s + i.un, 0);
+  $('#titulo').textContent = frete ? `Frete #${frete}` : 'Envio';
+  $('#resumo').textContent = `${itens.length} produtos · ${total} unidades`;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  $('#linhas').innerHTML = itens.map((it, i) => `<tr><td>${esc(it.nome)}</td><td class="cod">${esc(it.sku)}</td><td class="cod">${esc(it.ml)}</td><td class="cod">${esc(it.ean || '—')}</td>
+<td class="n">${it.un}</td><td>${esc(it.ident)}</td>
+<td><input type="number" min="0" step="1" data-i="${i}" data-k="caixas" value="${esc(it.caixas)}" placeholder=" " aria-label="Caixas de ${esc(it.sku || it.nome)}"></td>
+<td><input type="text" data-i="${i}" data-k="quem" value="${esc(it.quem)}" placeholder=" " aria-label="Quem fez ${esc(it.sku || it.nome)}"></td></tr>`).join('');
+  $('#res').hidden = false;
+  totais();
+}
+function totais() {
+  const cx = itens.reduce((s, i) => s + (+i.caixas || 0), 0);
+  $('#tituloImp').textContent = frete ? `Frete #${frete}` : 'Envio';
+  $('#nProd').textContent = itens.length;
+  $('#nUn').textContent = itens.reduce((s, i) => s + i.un, 0);
+  $('#nCx').textContent = cx || '____';
+}
+
+async function abrir(f) {
+  if (!f) return;
+  $('#status').textContent = `Lendo ${f.name}…`;
+  try {
+    itens = await ler(await f.arrayBuffer());
+    if (!itens.length) throw new Error('Nenhum produto encontrado no PDF.');
+    $('#status').textContent = f.name;
+    mostrar();
+  } catch (e) {
+    $('#status').innerHTML = `<span class="erro">${e.message}</span>`;
+    $('#res').hidden = true;
+  }
+}
+
+$('#arq').addEventListener('change', e => abrir(e.target.files[0]));
+const zona = $('#soltar');
+zona.addEventListener('dragover', e => { e.preventDefault(); zona.classList.add('em-cima'); });
+zona.addEventListener('dragleave', () => zona.classList.remove('em-cima'));
+zona.addEventListener('drop', e => { e.preventDefault(); zona.classList.remove('em-cima'); abrir(e.dataTransfer.files[0]); });
+$('#linhas').addEventListener('input', e => { const d = e.target.dataset; if (d.i) { itens[d.i][d.k] = e.target.value; totais(); } });
+$('#imprimir').addEventListener('click', () => { $('#dataImp').textContent = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); print(); });
+$('#nomeTodos').addEventListener('input', e => {
+  itens.forEach(it => (it.quem = e.target.value));
+  document.querySelectorAll('[data-k=quem]').forEach(inp => (inp.value = e.target.value));
+});
+
+$('#baixar').addEventListener('click', () => {
+  const linhas = itens.map(it => ({
+    'Produto': it.nome, 'SKU': it.sku, 'Código ML': it.ml, 'Código universal': it.ean, 'Quantidade': it.un,
+    'Identificação': it.ident, 'Caixas': it.caixas === '' ? '' : Number(it.caixas), 'Nome de quem fez': it.quem,
+  }));
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  ws['!cols'] = [{ wch: 60 }, { wch: 24 }, { wch: 12 }, { wch: 16 }, { wch: 11 }, { wch: 24 }, { wch: 8 }, { wch: 22 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Envio');
+  XLSX.writeFile(wb, `Envio Full ${frete || ''}.xlsx`.replace(' .xlsx', '.xlsx'));
+});
+</script>
+</body>
+</html>
